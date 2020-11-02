@@ -48,7 +48,7 @@ def knapsack_bqm(costs, weights, weight_capacity):
     # Lucas's algorithm introduces additional slack variables to handle
     # the inequality. max_y_index indicates the maximum index in the y
     # sum; hence the number of slack variables.
-    max_y_index = ceil(log(weight_capacity, 2))
+    max_y_index = ceil(log(weight_capacity))
 
 
     # Slack variable list for Lucas's algorithm. The last variable has
