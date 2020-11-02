@@ -41,7 +41,6 @@ def knapsack_bqm(costs, weights, weight_capacity):
     # Lagrangian multiplier
     # First guess as suggested in Lucas's paper
     lagrange = max(costs)
-    lagrange = 1
 
     # Number of objects
     x_size = len(costs)
