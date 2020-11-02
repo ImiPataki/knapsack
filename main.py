@@ -138,8 +138,8 @@ def knapsack_bqm(costs, weights, weight_capacity):
 
     """
 
-    y = [n for n in range(1, weight_capacity)]
-    y.append(999)
+    y = [n for n in range(1, weight_capacity + 1)]
+
 
 
     # 1)
