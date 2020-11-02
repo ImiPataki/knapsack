@@ -17,11 +17,18 @@ import sys
 from dwave.system import LeapHybridSampler
 from math import log, ceil
 import dimod
+from dwave.cloud import Client
 
 # From Andrew Lucas, NP-hard combinatorial problems as Ising spin glasses
 # Workshop on Classical and Quantum Optimization; ETH Zuerich - August 20, 2014
 # based on Lucas, Frontiers in Physics _2, 5 (2014)
 
+#client = Client.from_config(config_file='dwave.conf')
+
+# Found solution [12, 27, 20, 10] at energy -270.0.
+# Found solution [12, 11, 20, 10, 15] at energy -270.0.
+# Found solution [27, 20, 10, 15] at energy -286.0. -> lagrange = 1
+# Found solution [12, 11, 20, 10, 15] at energy -270.0. -> lagrange = max(costs) * 2
 
 def knapsack_bqm(costs, weights, weight_capacity):
 
@@ -34,14 +41,16 @@ def knapsack_bqm(costs, weights, weight_capacity):
     # Lagrangian multiplier
     # First guess as suggested in Lucas's paper
     lagrange = max(costs)
+    lagrange = 1
 
     # Number of objects
     x_size = len(costs)
-
+    """
     # Lucas's algorithm introduces additional slack variables to handle
     # the inequality. max_y_index indicates the maximum index in the y
     # sum; hence the number of slack variables.
-    max_y_index = ceil(log(weight_capacity))
+    max_y_index = ceil(log(weight_capacity, 2))
+
 
     # Slack variable list for Lucas's algorithm. The last variable has
     # a special value because it terminates the sequence.
@@ -51,16 +60,39 @@ def knapsack_bqm(costs, weights, weight_capacity):
     # Hamiltonian xi-xi terms
     for k in range(x_size):
         bqm.set_linear('x' + str(k), lagrange * (weights[k]**2) - costs[k])
+    
+    # f)
+        for n in range(x_size):
+            bqm.set_linear('x' + str(n), lagrange * (weights[n]**2))
+    # h) 
+    for n in range(x_size):
+        bqm.set_linear('x' + str(n), lagrange * -1 * costs[n])
+    
+   
 
     # Hamiltonian xi-xj terms
     for i in range(x_size):
         for j in range(i + 1, x_size):
             key = ('x' + str(i), 'x' + str(j))
             bqm.quadratic[key] = 2 * lagrange * weights[i] * weights[j]
+  
+    # g)
+    for i in range(x_size):
+        for j in range(i + 1, x_size):
+            key = ('x' + str(i), 'x' + str(j))
+            bqm.quadratic[key] = 2 * lagrange * weights[i] * weights[j]
+   
+
 
     # Hamiltonian y-y terms
     for k in range(max_y_index):
         bqm.set_linear('y' + str(k), lagrange * (y[k]**2))
+    
+    # c)
+    for n in range(70):
+        bqm.set_linear('y' + str(n), lagrange * n**2)
+   
+
 
     # Hamiltonian yi-yj terms
     for i in range(max_y_index):
@@ -68,23 +100,110 @@ def knapsack_bqm(costs, weights, weight_capacity):
             key = ('y' + str(i), 'y' + str(j))
             bqm.quadratic[key] = 2 * lagrange * y[i] * y[j]
 
+    # d)
+    for i in range(70):
+        for j in range(i + 1, 70):
+            key = ('y' + str(i), 'y' + str(j))
+            bqm.quadratic[key] = 2 * lagrange * i * j
+    
+  
+
+
     # Hamiltonian x-y terms
     for i in range(x_size):
         for j in range(max_y_index):
             key = ('x' + str(i), 'y' + str(j))
             bqm.quadratic[key] = -2 * lagrange * weights[i] * y[j]
 
+
+    # e)
+    for n in range(70):
+        for a in range(x_size):
+            key = ('x' + str(a), 'y' + str(n))
+            bqm.quadratic[key] = -2 * lagrange * n * weights[a]
+    
+    
+    # These are not in the original solution
+    # 1)
+    # a)
+    for n in range(70):
+        bqm.set_linear('y' + str(n), lagrange * -1)
+
+    # b)
+    for i in range(70):
+        for j in range(i + 1, 70):
+            key = ('y' + str(i), 'y' + str(j))
+            bqm.quadratic[key] = 2 * lagrange
+    
+    
+    """
+
+    # 1)
+    # a)
+    for n in range(weight_capacity):
+        bqm.set_linear('y' + str(n), lagrange * -1)
+
+    # b)
+    for i in range(weight_capacity):
+        for j in range(i + 1, weight_capacity):
+            key = ('y' + str(i), 'y' + str(j))
+            bqm.quadratic[key] = 2 * lagrange
+
+    # 2)
+    # c)
+    for n in range(weight_capacity):
+        bqm.set_linear('y' + str(n), lagrange * n ** 2)
+
+    # d)
+    for i in range(weight_capacity):
+        for j in range(i + 1, weight_capacity):
+            key = ('y' + str(i), 'y' + str(j))
+            bqm.quadratic[key] = 2 * lagrange * i * j
+
+    # e)
+    for n in range(weight_capacity):
+        for a in range(x_size):
+            key = ('x' + str(a), 'y' + str(n))
+            bqm.quadratic[key] = -2 * lagrange * n * weights[a]
+    # f)
+    for n in range(x_size):
+        bqm.set_linear('x' + str(n), lagrange * (weights[n] ** 2))
+
+    # g)
+    for i in range(x_size):
+        for j in range(i + 1, x_size):
+            key = ('x' + str(i), 'x' + str(j))
+            bqm.quadratic[key] = 2 * lagrange * weights[i] * weights[j]
+
+    # 3)
+    # h)
+    for n in range(x_size):
+        bqm.set_linear('x' + str(n), lagrange * -1 * costs[n])
+
     return bqm
 
 
-data_file_name = sys.argv[1] if len(sys.argv) > 1 else "data/large.csv"
-weight_capacity = float(sys.argv[2]) if len(sys.argv) > 2 else 70
+
+
+
+
+
+
+
+
+
+data_file_name = "small.csv"
+weight_capacity = 70
 
 # parse input data
 df = pd.read_csv(data_file_name, header=None)
 df.columns = ['cost', 'weight']
 
+
+
 bqm = knapsack_bqm(df['cost'], df['weight'], weight_capacity)
+
+#exit()
 
 sampler = LeapHybridSampler()
 sampleset = sampler.sample(bqm)
@@ -101,3 +220,5 @@ for sample, energy in zip(sampleset.record.sample, sampleset.record.energy):
             # weights are numerically sorted
             solution.append(df['weight'][int(this_var[1:])])
     print("Found solution {} at energy {}.".format(solution, energy))
+
+#client.close()
